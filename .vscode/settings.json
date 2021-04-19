@@ -1,0 +1,6 @@
+{
+    "files.associations": {
+        "labscim-lora-radio-protocol.h": "c",
+        "labscim_platform_socket.h": "c"
+    }
+}

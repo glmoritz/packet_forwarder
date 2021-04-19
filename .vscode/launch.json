@@ -1,0 +1,34 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "(gdb) Launch",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "/home/guilherme/packet_forwarder/lora_pkt_fwd/lora_pkt_fwd",
+            "args": [
+                "-b512",
+                "-p9608",
+                "-ngateway-node-aaa00000001",
+                "-alocalhost"
+            ],
+            "stopAtEntry": true,
+            "cwd": "/home/guilherme/packet_forwarder/lora_pkt_fwd/",
+            //"cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "preLaunchTask": "build lib",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ]
+        }
+    ]
+}

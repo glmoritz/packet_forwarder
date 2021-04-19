@@ -58,7 +58,8 @@ extern pthread_mutex_t mx_concent;
 /* -------------------------------------------------------------------------- */
 /* --- PUBLIC FUNCTIONS DEFINITION ------------------------------------------ */
 
-int get_concentrator_time(struct timeval *concent_time, struct timeval unix_time) {
+int get_concentrator_time(struct timeval *concent_time, struct timeval unix_time) 
+{
     struct timeval local_timeval;
 
     if (concent_time == NULL) {
@@ -66,13 +67,15 @@ int get_concentrator_time(struct timeval *concent_time, struct timeval unix_time
         return -1;
     }
 
-    pthread_mutex_lock(&mx_timersync); /* protect global variable access */
-    timersub(&unix_time, &offset_unix_concent, &local_timeval);
-    pthread_mutex_unlock(&mx_timersync);
+    //pthread_mutex_lock(&mx_timersync); /* protect global variable access */
+    //timersub(&unix_time, &offset_unix_concent, &local_timeval);
+    //pthread_mutex_unlock(&mx_timersync);
 
     /* TODO: handle sx1301 coutner wrap-up !! */
-    concent_time->tv_sec = local_timeval.tv_sec;
-    concent_time->tv_usec = local_timeval.tv_usec;
+    //concent_time->tv_sec = local_timeval.tv_sec;
+    //concent_time->tv_usec = local_timeval.tv_usec;
+
+    lgw_labscim_get_time(concent_time);
 
     MSG_DEBUG(DEBUG_TIMERSYNC, " --> TIME: unix current time is   %ld,%ld\n", unix_time.tv_sec, unix_time.tv_usec);
     MSG_DEBUG(DEBUG_TIMERSYNC, "           offset is              %ld,%ld\n", offset_unix_concent.tv_sec, offset_unix_concent.tv_usec);

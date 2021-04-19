@@ -76,8 +76,8 @@ Maintainer: Michael Coracin
 #define DEFAULT_PORT_DW     1782
 #define DEFAULT_KEEPALIVE   5           /* default time interval for downstream keep-alive packet */
 #define DEFAULT_STAT        30          /* default time interval for statistics */
-#define PUSH_TIMEOUT_MS     100
-#define PULL_TIMEOUT_MS     200
+#define PUSH_TIMEOUT_MS     500
+#define PULL_TIMEOUT_MS     500
 #define GPS_REF_MAX_AGE     30          /* maximum admitted delay in seconds of GPS loss before considering latest GPS sync unusable */
 #define FETCH_SLEEP_MS      10          /* nb of ms waited when a fetch return no packets */
 #define BEACON_POLL_MS      50          /* time in ms between polling of beacon TX status */
@@ -152,7 +152,7 @@ static struct timeval pull_timeout = {0, (PULL_TIMEOUT_MS * 1000)}; /* non criti
 /* hardware access control and correction */
 pthread_mutex_t mx_concent = PTHREAD_MUTEX_INITIALIZER; /* control access to the concentrator */
 static pthread_mutex_t mx_xcorr = PTHREAD_MUTEX_INITIALIZER; /* control access to the XTAL correction */
-static bool xtal_correct_ok = false; /* set true when XTAL correction is stable enough */
+static bool xtal_correct_ok = true; /* set true when XTAL correction is stable enough */
 static double xtal_correct = 1.0;
 
 /* GPS configuration and synchronization */
@@ -257,6 +257,72 @@ void thread_gps(void);
 void thread_valid(void);
 void thread_jit(void);
 void thread_timersync(void);
+
+/*Labscim*/
+
+static pthread_mutex_t gYieldMutex = PTHREAD_MUTEX_INITIALIZER; /* control access to the status report */
+#define JIT_THREAD_MASK (1<<0)
+#define UP_THREAD_MASK (1<<1)
+
+
+
+uint64_t gDontYield = JIT_THREAD_MASK | UP_THREAD_MASK;
+
+uint8_t* gNodeName;
+uint8_t* gServerAddress;
+uint64_t gIsMaster;
+uint64_t gServerPort;
+uint64_t gBufferSize;
+
+#define SERVER_PORT (9608)
+#define SERVER_ADDRESS "127.0.0.1"
+#define SOCK_BUFFER_SIZE (512)
+
+pthread_mutex_t gUpDownMutex = PTHREAD_MUTEX_INITIALIZER; 
+pthread_cond_t gUpDownCond = PTHREAD_COND_INITIALIZER;
+uint8_t gUPnDown = 1;
+uint8_t gTimeoutCount = 1;
+
+void
+platform_process_args(int argc, char**argv)
+{
+	uint64_t c;
+
+	while ((c = getopt (argc, argv, "a:p:b:n:")) != -1)
+		switch (c)
+		{
+		case 'a':
+			gServerAddress = optarg;
+			break;
+		case 'b':
+			if(optarg!=NULL)
+			{
+				gBufferSize = atoi(optarg);
+			}
+			else
+			{
+				gBufferSize = SOCK_BUFFER_SIZE;
+			}
+			break;
+		case 'p':
+			if(optarg!=NULL)
+			{
+				gServerPort = atoi(optarg);
+			}
+			else
+			{
+				gServerPort = SERVER_PORT;
+			}
+			break;
+		case 'n':
+			gNodeName = optarg;
+			break;        
+		case '?':
+			fprintf (stderr,"Unknown option character `\\x%x'.\n",	optopt);
+		}
+}
+/**--------------------------------**/
+
 
 /* -------------------------------------------------------------------------- */
 /* --- PRIVATE FUNCTIONS DEFINITION ----------------------------------------- */
@@ -973,7 +1039,9 @@ static int send_tx_ack(uint8_t token_h, uint8_t token_l, enum jit_error_e error)
 /* -------------------------------------------------------------------------- */
 /* --- MAIN FUNCTION -------------------------------------------------------- */
 
-int main(void)
+
+
+int main(int argc, char const *argv[])
 {
     struct sigaction sigact; /* SIGQUIT&SIGINT&SIGTERM signal handling */
     int i; /* loop variable and temporary variable for return value */
@@ -1040,6 +1108,9 @@ int main(void)
     float rx_nocrc_ratio;
     float up_ack_ratio;
     float dw_ack_ratio;
+
+    //command line arguments to this node omnet to lora_gateway
+    platform_process_args(argc,argv);
 
     /* display version informations */
     MSG("*** Beacon Packet Forwarder for Lora Gateway ***\nVersion: " VERSION_STRING "\n");
@@ -1117,9 +1188,7 @@ int main(void)
     /* sanity check on configuration variables */
     // TODO
 
-    /* process some of the configuration variables */
-    net_mac_h = htonl((uint32_t)(0xFFFFFFFF & (lgwm>>32)));
-    net_mac_l = htonl((uint32_t)(0xFFFFFFFF &  lgwm  ));
+    
 
     /* prepare hints to open network sockets */
     memset(&hints, 0, sizeof hints);
@@ -1191,13 +1260,17 @@ int main(void)
     freeaddrinfo(result);
 
     /* starting the concentrator */
-    i = lgw_start();
+    i = lgw_start(gNodeName, gBufferSize, &lgwm);
     if (i == LGW_HAL_SUCCESS) {
         MSG("INFO: [main] concentrator started, packet can now be received\n");
     } else {
         MSG("ERROR: [main] failed to start the concentrator\n");
         exit(EXIT_FAILURE);
     }
+
+    /* process some of the configuration variables */
+    net_mac_h = htonl((uint32_t)(0xFFFFFFFF & (lgwm>>32)));
+    net_mac_l = htonl((uint32_t)(0xFFFFFFFF &  lgwm  ));
 
     /* spawn threads to manage upstream and downstream */
     i = pthread_create( &thrid_up, NULL, (void * (*)(void *))thread_up, NULL);
@@ -1215,25 +1288,25 @@ int main(void)
         MSG("ERROR: [main] impossible to create JIT thread\n");
         exit(EXIT_FAILURE);
     }
-    i = pthread_create( &thrid_timersync, NULL, (void * (*)(void *))thread_timersync, NULL);
-    if (i != 0) {
-        MSG("ERROR: [main] impossible to create Timer Sync thread\n");
-        exit(EXIT_FAILURE);
-    }
+    //i = pthread_create( &thrid_timersync, NULL, (void * (*)(void *))thread_timersync, NULL);
+    //if (i != 0) {
+    //    MSG("ERROR: [main] impossible to create Timer Sync thread\n");
+    //    exit(EXIT_FAILURE);
+    //}
 
     /* spawn thread to manage GPS */
-    if (gps_enabled == true) {
-        i = pthread_create( &thrid_gps, NULL, (void * (*)(void *))thread_gps, NULL);
-        if (i != 0) {
-            MSG("ERROR: [main] impossible to create GPS thread\n");
-            exit(EXIT_FAILURE);
-        }
-        i = pthread_create( &thrid_valid, NULL, (void * (*)(void *))thread_valid, NULL);
-        if (i != 0) {
-            MSG("ERROR: [main] impossible to create validation thread\n");
-            exit(EXIT_FAILURE);
-        }
-    }
+    // if (gps_enabled == true) {
+    //     i = pthread_create( &thrid_gps, NULL, (void * (*)(void *))thread_gps, NULL);
+    //     if (i != 0) {
+    //         MSG("ERROR: [main] impossible to create GPS thread\n");
+    //         exit(EXIT_FAILURE);
+    //     }
+    //     i = pthread_create( &thrid_valid, NULL, (void * (*)(void *))thread_valid, NULL);
+    //     if (i != 0) {
+    //         MSG("ERROR: [main] impossible to create validation thread\n");
+    //        exit(EXIT_FAILURE);
+    //     }
+    // }
 
     /* configure signal handling */
     sigemptyset(&sigact.sa_mask);
@@ -1408,18 +1481,18 @@ int main(void)
     pthread_join(thrid_up, NULL);
     pthread_cancel(thrid_down); /* don't wait for downstream thread */
     pthread_cancel(thrid_jit); /* don't wait for jit thread */
-    pthread_cancel(thrid_timersync); /* don't wait for timer sync thread */
-    if (gps_enabled == true) {
-        pthread_cancel(thrid_gps); /* don't wait for GPS thread */
-        pthread_cancel(thrid_valid); /* don't wait for validation thread */
+    //pthread_cancel(thrid_timersync); /* don't wait for timer sync thread */
+    //if (gps_enabled == true) {
+    //    pthread_cancel(thrid_gps); /* don't wait for GPS thread */
+    //    pthread_cancel(thrid_valid); /* don't wait for validation thread */
 
-        i = lgw_gps_disable(gps_tty_fd);
-        if (i == LGW_HAL_SUCCESS) {
-            MSG("INFO: GPS closed successfully\n");
-        } else {
-            MSG("WARNING: failed to close GPS successfully\n");
-        }
-    }
+    //    i = lgw_gps_disable(gps_tty_fd);
+    //    if (i == LGW_HAL_SUCCESS) {
+    //        MSG("INFO: GPS closed successfully\n");
+    //    } else {
+    //        MSG("WARNING: failed to close GPS successfully\n");
+    //    }
+    //}
 
     /* if an exit signal was received, try to quit properly */
     if (exit_sig) {
@@ -1438,6 +1511,9 @@ int main(void)
     MSG("INFO: Exiting packet forwarder program\n");
     exit(EXIT_SUCCESS);
 }
+
+
+
 
 /* -------------------------------------------------------------------------- */
 /* --- THREAD 1: RECEIVING PACKETS AND FORWARDING THEM ---------------------- */
@@ -1493,6 +1569,7 @@ void thread_up(void) {
     buff_up[3] = PKT_PUSH_DATA;
     *(uint32_t *)(buff_up + 4) = net_mac_h;
     *(uint32_t *)(buff_up + 8) = net_mac_l;
+    
 
     while (!exit_sig && !quit_sig) {
 
@@ -1506,15 +1583,24 @@ void thread_up(void) {
         }
 
         /* check if there are status report to send */
-        send_report = report_ready; /* copy the variable so it doesn't change mid-function */
+        //send_report = report_ready; /* copy the variable so it doesn't change mid-function */
+        send_report = false;
         /* no mutex, we're only reading */
 
         /* wait a short time if no packets, nor status report */
         if ((nb_pkt == 0) && (send_report == false)) {
-            wait_ms(FETCH_SLEEP_MS);
+            
+            if(gDontYield)
+            {
+                pthread_mutex_lock(&gYieldMutex);   
+                gDontYield &= ~(UP_THREAD_MASK);
+                pthread_mutex_unlock(&gYieldMutex);   
+            }
+            lgw_labscim_sleep(FETCH_SLEEP_MS,!gDontYield);
             continue;
         }
-
+        
+        pthread_mutex_lock(&gUpDownMutex);
         /* get a copy of GPS time reference (avoid 1 mutex per packet) */
         if ((nb_pkt > 0) && (gps_enabled == true)) {
             pthread_mutex_lock(&mx_timeref);
@@ -1812,6 +1898,7 @@ void thread_up(void) {
                 buff_index -= 8; /* removes "rxpk":[ */
             } else {
                 /* all packet have been filtered out and no report, restart loop */
+                pthread_mutex_unlock(&gUpDownMutex);
                 continue;
             }
         } else {
@@ -1844,7 +1931,9 @@ void thread_up(void) {
         ++buff_index;
         buff_up[buff_index] = 0; /* add string terminator, for safety */
 
-        printf("\nJSON up: %s\n", (char *)(buff_up + 12)); /* DEBUG: display JSON payload */
+        struct timeval tv;
+        gettimeofday(&tv, NULL);
+        printf("\n%lu, JSON up: %s\n", tv.tv_sec*1000000+tv.tv_usec,(char *)(buff_up + 12)); /* DEBUG: display JSON payload */
 
         /* send datagram to server */
         send(sock_up, (void *)buff_up, buff_index, 0);
@@ -1876,6 +1965,19 @@ void thread_up(void) {
             }
         }
         pthread_mutex_unlock(&mx_meas_up);
+
+        if (nb_pkt > 0)
+        {
+            //wait for downstream thread
+            gUPnDown = 0;
+            gTimeoutCount = 1;
+            while (gUPnDown == 0)
+            {
+                pthread_cond_wait(&gUpDownCond, &gUpDownMutex);
+            }
+        }
+        pthread_mutex_unlock(&gUpDownMutex);
+
     }
     MSG("\nINFO: End of upstream thread\n");
 }
@@ -1928,6 +2030,8 @@ void thread_down(void) {
     struct timespec next_beacon_gps_time; /* gps time of next beacon packet */
     struct timespec last_beacon_gps_time; /* gps time of last enqueued beacon packet */
     int retry;
+    int response_count = 0;
+    struct timeval tv;
 
     /* beacon data fields, byte 0 is Least Significant Byte */
     int32_t field_latitude; /* 3 bytes, derived from reference latitude */
@@ -2084,6 +2188,11 @@ void thread_down(void) {
         while ((int)difftimespec(recv_time, send_time) < keepalive_time) {
 
             /* try to receive a datagram */
+            if (gUPnDown == 0) 
+            {
+                gettimeofday(&tv, NULL);
+                MSG("%lu, INFO: [down] Receiving\n", tv.tv_sec * 1000000 + tv.tv_usec);
+            }
             msg_len = recv(sock_down, (void *)buff_down, (sizeof buff_down)-1, 0);
             clock_gettime(CLOCK_MONOTONIC, &recv_time);
 
@@ -2152,6 +2261,7 @@ void thread_down(void) {
                     /* Insert beacon packet in JiT queue */
                     gettimeofday(&current_unix_time, NULL);
                     get_concentrator_time(&current_concentrator_time, current_unix_time);
+                    
                     jit_result = jit_enqueue(&jit_queue, &current_concentrator_time, &beacon_pkt, JIT_PKT_TYPE_BEACON);
                     if (jit_result == JIT_ERROR_OK) {
                         /* update stats */
@@ -2194,6 +2304,25 @@ void thread_down(void) {
             /* if no network message was received, got back to listening sock_down socket */
             if (msg_len == -1) {
                 //MSG("WARNING: [down] recv returned %s\n", strerror(errno)); /* too verbose */
+                pthread_mutex_lock(&gUpDownMutex);
+                if (gUPnDown == 0) 
+                {
+                    if(gTimeoutCount > 0)
+                    {
+                        gTimeoutCount--;        
+                        gettimeofday(&tv, NULL);                
+                        MSG("%lu, INFO: [down] Timeoutcount = %d\n", tv.tv_sec*1000000+tv.tv_usec, gTimeoutCount);
+                    }
+                    else
+                    {
+                        gettimeofday(&tv, NULL);
+                        MSG("%lu, WARNING: [down] Server response timeout\n", tv.tv_sec*1000000+tv.tv_usec);
+                        gUPnDown = 1;
+                        response_count = 0;
+                        pthread_cond_signal(&gUpDownCond);
+                    }
+                }
+                pthread_mutex_unlock(&gUpDownMutex);
                 continue;
             }
 
@@ -2215,10 +2344,12 @@ void thread_down(void) {
                         pthread_mutex_lock(&mx_meas_dw);
                         meas_dw_ack_rcv += 1;
                         pthread_mutex_unlock(&mx_meas_dw);
-                        MSG("INFO: [down] PULL_ACK received in %i ms\n", (int)(1000 * difftimespec(recv_time, send_time)));
+                        gettimeofday(&tv, NULL);
+                        MSG("%lu, INFO: [down] PULL_ACK received in %i ms\n",tv.tv_sec*1000000+tv.tv_usec, (int)(1000 * difftimespec(recv_time, send_time)));
                     }
                 } else { /* out-of-sync token */
-                    MSG("INFO: [down] received out-of-sync ACK\n");
+                    gettimeofday(&tv, NULL);
+                    MSG("%lu, INFO: [down] received out-of-sync ACK\n", tv.tv_sec*1000000+tv.tv_usec);
                 }
                 continue;
             }
@@ -2226,7 +2357,9 @@ void thread_down(void) {
             /* the datagram is a PULL_RESP */
             buff_down[msg_len] = 0; /* add string terminator, just to be safe */
             MSG("INFO: [down] PULL_RESP received  - token[%d:%d] :)\n", buff_down[1], buff_down[2]); /* very verbose */
-            printf("\nJSON down: %s\n", (char *)(buff_down + 4)); /* DEBUG: display JSON payload */
+            gettimeofday(&tv, NULL);
+            printf("\n%lu, JSON down: %s\n",tv.tv_sec*1000000+tv.tv_usec, (char *)(buff_down + 4)); /* DEBUG: display JSON payload */
+            response_count++;
 
             /* initialize TX struct and try to parse JSON */
             memset(&txpkt, 0, sizeof txpkt);
@@ -2542,6 +2675,24 @@ void thread_down(void) {
 
             /* Send acknoledge datagram to server */
             send_tx_ack(buff_down[1], buff_down[2], jit_result);
+            if((jit_result == JIT_ERROR_COLLISION_PACKET) && (response_count<2))
+            {
+                gTimeoutCount++;
+                continue;
+            }
+            pthread_mutex_lock(&gUpDownMutex);
+            if(gUPnDown == 1)
+            {
+                printf("ERROR: Out of Sync Downstream packet\n");
+            }
+            else
+            {
+                gUPnDown = 1;
+                response_count = 0;
+                pthread_cond_signal(&gUpDownCond);
+            }
+            pthread_mutex_unlock(&gUpDownMutex);
+
         }
     }
     MSG("\nINFO: End of downstream thread\n");
@@ -2582,7 +2733,13 @@ void thread_jit(void) {
     uint8_t tx_status;
 
     while (!exit_sig && !quit_sig) {
-        wait_ms(10);
+        if (gDontYield)
+        {
+            pthread_mutex_lock(&gYieldMutex);
+            gDontYield &= ~(JIT_THREAD_MASK);
+            pthread_mutex_unlock(&gYieldMutex);
+        }
+        lgw_labscim_sleep(10, !gDontYield);
 
         /* transfer data and metadata to the concentrator, and schedule TX */
         gettimeofday(&current_unix_time, NULL);
