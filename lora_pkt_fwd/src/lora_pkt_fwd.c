@@ -270,6 +270,11 @@ uint64_t gDontYield = JIT_THREAD_MASK | UP_THREAD_MASK;
 
 uint8_t* gNodeName;
 uint8_t* gServerAddress;
+
+char *global_cfg_path= "global_conf.json"; /* contain global (typ. network-wide) configuration */
+char *local_cfg_path = "local_conf.json"; /* contain node specific configuration, overwrite global parameters for parameters that are defined in both */
+char *debug_cfg_path = "debug_conf.json"; /* if present, all other configuration files are ignored */
+
 uint64_t gIsMaster;
 uint64_t gServerPort;
 uint64_t gBufferSize;
@@ -288,7 +293,7 @@ platform_process_args(int argc, char**argv)
 {
 	uint64_t c;
 
-	while ((c = getopt (argc, argv, "a:p:b:n:")) != -1)
+	while ((c = getopt (argc, argv, "a:p:b:n:g:l:d:")) != -1)
 		switch (c)
 		{
 		case 'a':
@@ -316,7 +321,16 @@ platform_process_args(int argc, char**argv)
 			break;
 		case 'n':
 			gNodeName = optarg;
-			break;        
+			break;   
+        case 'g':
+			global_cfg_path = optarg;
+			break;       
+        case 'l':
+			local_cfg_path = optarg;
+			break;  
+        case 'd':
+			debug_cfg_path = optarg;
+			break;  
 		case '?':
 			fprintf (stderr,"Unknown option character `\\x%x'.\n",	optopt);
 		}
@@ -1047,10 +1061,10 @@ int main(int argc, char const *argv[])
     int i; /* loop variable and temporary variable for return value */
     int x;
 
-    /* configuration file related */
-    char *global_cfg_path= "global_conf.json"; /* contain global (typ. network-wide) configuration */
-    char *local_cfg_path = "local_conf.json"; /* contain node specific configuration, overwrite global parameters for parameters that are defined in both */
-    char *debug_cfg_path = "debug_conf.json"; /* if present, all other configuration files are ignored */
+    /* configuration file related - changed to globals to be received as parameters*/
+    //char *global_cfg_path= "global_conf.json"; /* contain global (typ. network-wide) configuration */
+    //char *local_cfg_path = "local_conf.json"; /* contain node specific configuration, overwrite global parameters for parameters that are defined in both */
+    //char *debug_cfg_path = "debug_conf.json"; /* if present, all other configuration files are ignored */
 
     /* threads */
     pthread_t thrid_up;
@@ -1599,8 +1613,9 @@ void thread_up(void) {
             lgw_labscim_sleep(FETCH_SLEEP_MS,!gDontYield);
             continue;
         }
-        
+#ifndef LABSCIM_REALTIME
         pthread_mutex_lock(&gUpDownMutex);
+#endif
         /* get a copy of GPS time reference (avoid 1 mutex per packet) */
         if ((nb_pkt > 0) && (gps_enabled == true)) {
             pthread_mutex_lock(&mx_timeref);
@@ -1965,7 +1980,7 @@ void thread_up(void) {
             }
         }
         pthread_mutex_unlock(&mx_meas_up);
-
+#ifndef LABSCIM_REALTIME
         if (nb_pkt > 0)
         {
             //wait for downstream thread
@@ -1977,7 +1992,7 @@ void thread_up(void) {
             }
         }
         pthread_mutex_unlock(&gUpDownMutex);
-
+#endif
     }
     MSG("\nINFO: End of upstream thread\n");
 }
@@ -2187,12 +2202,14 @@ void thread_down(void) {
         recv_time = send_time;
         while ((int)difftimespec(recv_time, send_time) < keepalive_time) {
 
+#ifndef LABSCIM_REALTIME
             /* try to receive a datagram */
             if (gUPnDown == 0) 
             {
                 gettimeofday(&tv, NULL);
                 MSG("%lu, INFO: [down] Receiving\n", tv.tv_sec * 1000000 + tv.tv_usec);
             }
+#endif
             msg_len = recv(sock_down, (void *)buff_down, (sizeof buff_down)-1, 0);
             clock_gettime(CLOCK_MONOTONIC, &recv_time);
 
@@ -2304,6 +2321,7 @@ void thread_down(void) {
             /* if no network message was received, got back to listening sock_down socket */
             if (msg_len == -1) {
                 //MSG("WARNING: [down] recv returned %s\n", strerror(errno)); /* too verbose */
+#ifndef LABSCIM_REALTIME                
                 pthread_mutex_lock(&gUpDownMutex);
                 if (gUPnDown == 0) 
                 {
@@ -2323,6 +2341,7 @@ void thread_down(void) {
                     }
                 }
                 pthread_mutex_unlock(&gUpDownMutex);
+#endif
                 continue;
             }
 
@@ -2675,6 +2694,7 @@ void thread_down(void) {
 
             /* Send acknoledge datagram to server */
             send_tx_ack(buff_down[1], buff_down[2], jit_result);
+#ifndef LABSCIM_REALTIME
             if((jit_result == JIT_ERROR_COLLISION_PACKET) && (response_count<2))
             {
                 gTimeoutCount++;
@@ -2692,7 +2712,7 @@ void thread_down(void) {
                 pthread_cond_signal(&gUpDownCond);
             }
             pthread_mutex_unlock(&gUpDownMutex);
-
+#endif
         }
     }
     MSG("\nINFO: End of downstream thread\n");

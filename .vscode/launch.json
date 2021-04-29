@@ -13,7 +13,10 @@
                 "-b512",
                 "-p9608",
                 "-ngateway-node-aaa00000001",
-                "-alocalhost"
+                "-alocalhost",
+                "-gglobal_conf.json",                
+                "-llocal_conf.json",
+                "-ddebug_conf.json"
             ],
             "stopAtEntry": true,
             "cwd": "/home/guilherme/packet_forwarder/lora_pkt_fwd/",
