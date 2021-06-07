@@ -12,7 +12,7 @@
             "args": [
                 "-b512",
                 "-p9608",
-                "-ngateway-node-aaa00000001",
+                "-nlabscim-debug-gateway-node-aaa00000001",
                 "-alocalhost",
                 "-gglobal_conf.json",                
                 "-llocal_conf.json",

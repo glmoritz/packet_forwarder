@@ -1,6 +1,8 @@
 {
     "files.associations": {
         "labscim-lora-radio-protocol.h": "c",
-        "labscim_platform_socket.h": "c"
+        "labscim_platform_socket.h": "c",
+        "mqttclient.h": "c",
+        "sstream": "c"
     }
 }

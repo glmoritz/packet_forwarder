@@ -38,8 +38,7 @@ LGW_INC += $(LGW_PATH)/inc/loragw_gps.h
 
 ### Linking options
 
-LIBS := -lloragw -lrt -lpthread -lm
-
+LIBS := -lloragw -lrt -lpthread -lm -lpaho-mqtt3a
 ### General build targets
 
 all: $(APP_NAME)

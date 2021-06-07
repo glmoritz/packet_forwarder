@@ -57,6 +57,7 @@ Maintainer: Michael Coracin
 #include "loragw_aux.h"
 #include "loragw_reg.h"
 
+
 /* -------------------------------------------------------------------------- */
 /* --- PRIVATE MACROS ------------------------------------------------------- */
 
@@ -259,6 +260,8 @@ void thread_jit(void);
 void thread_timersync(void);
 
 /*Labscim*/
+void thread_labscim_mqtt(void);
+
 
 static pthread_mutex_t gYieldMutex = PTHREAD_MUTEX_INITIALIZER; /* control access to the status report */
 #define JIT_THREAD_MASK (1<<0)
@@ -1072,7 +1075,7 @@ int main(int argc, char const *argv[])
     pthread_t thrid_gps;
     pthread_t thrid_valid;
     pthread_t thrid_jit;
-    pthread_t thrid_timersync;
+    pthread_t thrid_timersync;    
 
     /* network socket creation */
     struct addrinfo hints;
@@ -1302,6 +1305,7 @@ int main(int argc, char const *argv[])
         MSG("ERROR: [main] impossible to create JIT thread\n");
         exit(EXIT_FAILURE);
     }
+
     //i = pthread_create( &thrid_timersync, NULL, (void * (*)(void *))thread_timersync, NULL);
     //if (i != 0) {
     //    MSG("ERROR: [main] impossible to create Timer Sync thread\n");
@@ -1597,8 +1601,11 @@ void thread_up(void) {
         }
 
         /* check if there are status report to send */
-        //send_report = report_ready; /* copy the variable so it doesn't change mid-function */
+#ifndef LABSCIM_REALTIME                
         send_report = false;
+#else
+        send_report = report_ready; /* copy the variable so it doesn't change mid-function */
+#endif
         /* no mutex, we're only reading */
 
         /* wait a short time if no packets, nor status report */
