@@ -1664,8 +1664,10 @@ void thread_up(void) {
             meas_nb_rx_rcv += 1;
             switch(p->status) {
                 case STAT_CRC_OK:
-                    meas_nb_rx_ok += 1;
-                    printf( "\nINFO: Received pkt from mote: %08X (fcnt=%u)\n", mote_addr, mote_fcnt );
+                    meas_nb_rx_ok += 1;  
+                    struct timeval tv;
+                    gettimeofday(&tv, NULL);
+                    printf( "\n\n%lu, INFO: Received pkt from mote: %08X (fcnt=%u)\n",tv.tv_sec*1000000+tv.tv_usec, mote_addr, mote_fcnt );
                     if (!fwd_valid_pkt) {
                         pthread_mutex_unlock(&mx_meas_up);
                         continue; /* skip that packet */

@@ -130,7 +130,7 @@ bool jit_collision_test(uint32_t p1_count_us, uint32_t p1_pre_delay, uint32_t p1
 
 enum jit_error_e jit_enqueue(struct jit_queue_s *queue, struct timeval *time, struct lgw_pkt_tx_s *packet, enum jit_pkt_type_e pkt_type) {
     int i = 0;
-    uint32_t time_us = time->tv_sec * 1000000UL + time->tv_usec; /* convert time in µs */
+    int32_t time_us = time->tv_sec * 1000000UL + time->tv_usec; /* convert time in µs */
     uint32_t packet_post_delay = 0;
     uint32_t packet_pre_delay = 0;
     uint32_t target_pre_delay = 0;
@@ -229,7 +229,7 @@ enum jit_error_e jit_enqueue(struct jit_queue_s *queue, struct timeval *time, st
      *  Warning: unsigned arithmetic (handle roll-over)
      *      t_packet < t_current + TX_START_DELAY + MARGIN
      */
-    if ((packet->count_us - time_us) <= (TX_START_DELAY + TX_MARGIN_DELAY + TX_JIT_DELAY)) {
+    if (((int64_t)packet->count_us - time_us) <= (TX_START_DELAY + TX_MARGIN_DELAY + TX_JIT_DELAY)) {
         MSG_DEBUG(DEBUG_JIT_ERROR, "ERROR: Packet REJECTED, already too late to send it (current=%u, packet=%u, type=%d)\n", time_us, packet->count_us, pkt_type);
         pthread_mutex_unlock(&mx_jit_queue);
         return JIT_ERROR_TOO_LATE;
@@ -247,7 +247,7 @@ enum jit_error_e jit_enqueue(struct jit_queue_s *queue, struct timeval *time, st
                 t_packet > t_current + TX_MAX_ADVANCE_DELAY
      */
     if ((pkt_type == JIT_PKT_TYPE_DOWNLINK_CLASS_A) || (pkt_type == JIT_PKT_TYPE_DOWNLINK_CLASS_B)) {
-        if ((packet->count_us - time_us) > TX_MAX_ADVANCE_DELAY) {
+        if (((int64_t)packet->count_us - time_us) > TX_MAX_ADVANCE_DELAY) {
             MSG_DEBUG(DEBUG_JIT_ERROR, "ERROR: Packet REJECTED, timestamp seems wrong, too much in advance (current=%u, packet=%u, type=%d)\n", time_us, packet->count_us, pkt_type);
             pthread_mutex_unlock(&mx_jit_queue);
             return JIT_ERROR_TOO_EARLY;
