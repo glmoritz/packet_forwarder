@@ -8,7 +8,7 @@
             "name": "(gdb) Launch",
             "type": "cppdbg",
             "request": "launch",
-            "program": "/home/guilherme/packet_forwarder/lora_pkt_fwd/lora_pkt_fwd",
+            "program": "~/packet_forwarder/lora_pkt_fwd/lora_pkt_fwd",
             "args": [
                 "-b512",
                 "-p9608",
@@ -19,7 +19,7 @@
                 "-ddebug_conf.json"
             ],
             "stopAtEntry": true,
-            "cwd": "/home/guilherme/packet_forwarder/lora_pkt_fwd/",
+            "cwd": "~/packet_forwarder/lora_pkt_fwd/",
             //"cwd": "${workspaceFolder}",
             "environment": [],
             "externalConsole": false,
