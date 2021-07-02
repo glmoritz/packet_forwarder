@@ -29,7 +29,7 @@ Maintainer: Michael Coracin
 #define MSG_DEBUG(FLAG, fmt, ...)                                                                         \
             do  {                                                                                         \
                 if (FLAG)                                                                                 \
-                    labscim_printf(stdout, "%s:%d:%s(): " fmt, __FILE__, __LINE__, __FUNCTION__, ##__VA_ARGS__); \
+                    labscim_printf("%s:%d:%s(): " fmt, __FILE__, __LINE__, __FUNCTION__, ##__VA_ARGS__); \
             } while (0)
 
 
