@@ -4,7 +4,7 @@
             "name": "Linux",
             "includePath": [
                 "${workspaceFolder}/**",
-                "/home/guilherme/lora_gateway/libloragw/inc"
+                "~/lora_gateway/libloragw/inc"
             ],
             "defines": [],
             "compilerPath": "/usr/bin/gcc",
