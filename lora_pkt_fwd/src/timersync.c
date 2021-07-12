@@ -90,7 +90,7 @@ int get_concentrator_time(struct timeval *concent_time, struct timeval unix_time
 void thread_timersync(void) {
     struct timeval unix_timeval;
     struct timeval concentrator_timeval;
-    uint32_t sx1301_timecount = 0;
+    uint64_t sx1301_timecount = 0;
     struct timeval offset_previous = {0,0};
     struct timeval offset_drift = {0,0}; /* delta between current and previous offset */
 

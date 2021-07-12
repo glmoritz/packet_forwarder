@@ -130,7 +130,7 @@ bool jit_collision_test(uint32_t p1_count_us, uint32_t p1_pre_delay, uint32_t p1
 
 enum jit_error_e jit_enqueue(struct jit_queue_s *queue, struct timeval *time, struct lgw_pkt_tx_s *packet, enum jit_pkt_type_e pkt_type) {
     int i = 0;
-    int32_t time_us = time->tv_sec * 1000000UL + time->tv_usec; /* convert time in µs */
+    int64_t time_us = time->tv_sec * 1000000UL + time->tv_usec; /* convert time in µs */
     uint32_t packet_post_delay = 0;
     uint32_t packet_pre_delay = 0;
     uint32_t target_pre_delay = 0;
