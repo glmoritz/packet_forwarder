@@ -68,6 +68,8 @@ Maintainer: Michael Coracin
 /* -------------------------------------------------------------------------- */
 /* --- PRIVATE CONSTANTS ---------------------------------------------------- */
 
+#define NUM_MIN(a,b) (a>b)?b:a
+
 #ifndef VERSION_STRING
   #define VERSION_STRING "undefined"
 #endif
@@ -1186,22 +1188,22 @@ int main(int argc, char const *argv[])
     }
 
     /* Start GPS a.s.a.p., to allow it to lock */
-    // if (gps_tty_path[0] != '\0')
-    // {                                                             /* do not try to open GPS device if no path set */
-    //     i = lgw_gps_enable(gps_tty_path, "ubx7", 0, &gps_tty_fd); /* HAL only supports u-blox 7 for now */
-    //     if (i != LGW_GPS_SUCCESS)
-    //     {
-    //         printf("WARNING: [main] impossible to open %s for GPS sync (check permissions)\n", gps_tty_path);
-    //         gps_enabled = false;
-    //         gps_ref_valid = false;
-    //     }
-    //     else
-    //     {
-    //         printf("INFO: [main] TTY port %s open for GPS synchronization\n", gps_tty_path);
-    //         gps_enabled = true;
-    //         gps_ref_valid = false;
-    //     }
-    // }
+    if (gps_tty_path[0] != '\0')
+    {                                                             /* do not try to open GPS device if no path set */
+        i = lgw_gps_enable(gps_tty_path, "ubx7", 0, &gps_tty_fd); /* HAL only supports u-blox 7 for now */
+        if (i != LGW_GPS_SUCCESS)
+        {
+            printf("WARNING: [main] impossible to open %s for GPS sync (check permissions)\n", gps_tty_path);
+            gps_enabled = false;
+            gps_ref_valid = false;
+        }
+        else
+        {
+            printf("INFO: [main] TTY port %s open for GPS synchronization\n", gps_tty_path);
+            gps_enabled = true;
+            gps_ref_valid = true;
+        }
+    }
 
     /*labscim fake gps*/
       gps_enabled = true;
@@ -1320,18 +1322,18 @@ int main(int argc, char const *argv[])
     //}
 
     /* spawn thread to manage GPS */
-     if (gps_enabled == true) {
-         i = pthread_create( &thrid_gps, NULL, (void * (*)(void *))thread_gps, NULL);
-         if (i != 0) {
-             MSG("ERROR: [main] impossible to create GPS thread\n");
-             exit(EXIT_FAILURE);
-         }
-    //     i = pthread_create( &thrid_valid, NULL, (void * (*)(void *))thread_valid, NULL);
+    //  if (gps_enabled == true) {
+    //      i = pthread_create( &thrid_gps, NULL, (void * (*)(void *))thread_gps, NULL);
+    //      if (i != 0) {
+    //          MSG("ERROR: [main] impossible to create GPS thread\n");
+    //          exit(EXIT_FAILURE);
+    //      }
+    // //     i = pthread_create( &thrid_valid, NULL, (void * (*)(void *))thread_valid, NULL);
     //     if (i != 0) {
     //         MSG("ERROR: [main] impossible to create validation thread\n");
     //        exit(EXIT_FAILURE);
     //     }
-     }
+     //}
 
     /* configure signal handling */
     sigemptyset(&sigact.sa_mask);
@@ -1625,6 +1627,8 @@ void thread_up(void) {
                 pthread_mutex_unlock(&gYieldMutex);   
             }
             lgw_labscim_sleep(FETCH_SLEEP_MS,!gDontYield);
+            gps_process_sync();
+            gps_process_coords();
             continue;
         }
 #ifndef LABSCIM_REALTIME
@@ -1870,7 +1874,7 @@ void thread_up(void) {
                 }
 
                 /* Lora SNR, 11-13 useful chars */
-                j = snprintf((char *)(buff_up + buff_index), TX_BUFF_SIZE-buff_index, ",\"lsnr\":%.1f", p->snr);
+                j = snprintf((char *)(buff_up + buff_index), TX_BUFF_SIZE-buff_index, ",\"lsnr\":%.1f", NUM_MIN(p->snr,31.0));
                 if (j > 0) {
                     buff_index += j;
                 } else {
@@ -2095,6 +2099,9 @@ void thread_down(void) {
     last_beacon_gps_time.tv_sec = 0;
     last_beacon_gps_time.tv_nsec = 0;
 
+    gps_process_sync();
+    gps_process_coords();
+
     /* beacon packet parameters */
     beacon_pkt.tx_mode = ON_GPS; /* send on PPS pulse */
     beacon_pkt.rf_chain = 0; /* antenna A */
@@ -2244,14 +2251,14 @@ void thread_down(void) {
                         /* if no beacon has been queued, get next slot from current GPS time */
                         diff_beacon_time = time_reference_gps.gps.tv_sec % ((time_t)beacon_period);
                         next_beacon_gps_time.tv_sec = time_reference_gps.gps.tv_sec +
-                                                        ((time_t)beacon_period - diff_beacon_time);
+                                                        ((time_t)beacon_period - diff_beacon_time);                        
                     } else {
                         /* if there is already a beacon, take it as reference */
                         next_beacon_gps_time.tv_sec = last_beacon_gps_time.tv_sec + beacon_period;
                     }
                     /* now we can add a beacon_period to the reference to get next beacon GPS time */
                     next_beacon_gps_time.tv_sec += (retry * beacon_period);
-                    next_beacon_gps_time.tv_nsec = 0;
+                    next_beacon_gps_time.tv_nsec = 0;                    
 
 #if DEBUG_BEACON
                     {
@@ -2776,6 +2783,8 @@ void thread_jit(void) {
             pthread_mutex_unlock(&gYieldMutex);
         }
         lgw_labscim_sleep(10, !gDontYield);
+        gps_process_sync();
+        gps_process_coords();
 
         /* transfer data and metadata to the concentrator, and schedule TX */
         gettimeofday(&current_unix_time, NULL);

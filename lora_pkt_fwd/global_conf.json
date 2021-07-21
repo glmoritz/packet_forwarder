@@ -195,12 +195,23 @@
 		}
 	},
 	"gateway_conf": {
-		"server_address": "localhost",
+		"server_address": "192.168.100.105",
 		"serv_port_up": 1700,
 		"serv_port_down": 1700,
-		"gps_tty_path": "/dev/ttyS0",
+		"gps_tty_path": "/dev/ttyS0",		
+        "ref_latitude": -25.439001,
+        "ref_longitude": -49.268640,
+        "ref_altitude": 934,        
+        "beacon_period": 128,
+        "beacon_freq_hz": 923300000,
+        "beacon_freq_nb": 8,
+        "beacon_freq_step": 600000,
+        "beacon_datarate": 12,
+        "beacon_bw_hz": 500000,
+        "beacon_power": 14,
+        "beacon_infodesc": 0,
 		"servers": [ {
-			"server_address": "localhost",
+			"server_address": "192.168.100.105",
 			"serv_port_up": 1700,
 			"serv_port_down": 1700,
 			"serv_enabled": true
