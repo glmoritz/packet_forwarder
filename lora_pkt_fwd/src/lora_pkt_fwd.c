@@ -57,6 +57,7 @@ Maintainer: Michael Coracin
 #include "loragw_aux.h"
 #include "loragw_reg.h"
 
+#include "lr_fhss_v1_base_types.h"
 
 /* -------------------------------------------------------------------------- */
 /* --- PRIVATE MACROS ------------------------------------------------------- */
@@ -1893,7 +1894,109 @@ void thread_up(void) {
                     MSG("ERROR: [up] snprintf failed line %u\n", (__LINE__ - 4));
                     exit(EXIT_FAILURE);
                 }
-            } else {
+            } else if(p->modulation = MOD_LABSCIM_FHSS){ //I used the parameters found in chirpstack gateway bridge
+                //refer to https://github.com/brocaar/chirpstack-gateway-bridge/blob/12069641891ca6e90ab3c89aac899a33b47c6c49/internal/backend/semtechudp/packets/push_data.go
+                memcpy((void *)(buff_up + buff_index), (void *)",\"modu\":\"LR-FHSS\"", 17);
+                buff_index += 17;
+
+                /* FHSS Convolutional code rate */
+                switch (p->coderate)
+                {
+                case LR_FHSS_V1_CR_1_2:
+                    memcpy((void *)(buff_up + buff_index), (void *)",\"codr\":\"1/2\"", 13);
+                    buff_index += 13;
+                    break;
+                case LR_FHSS_V1_CR_1_3:
+                    memcpy((void *)(buff_up + buff_index), (void *)",\"codr\":\"1/3\"", 13);
+                    buff_index += 13;
+                    break;
+                case LR_FHSS_V1_CR_2_3:
+                    memcpy((void *)(buff_up + buff_index), (void *)",\"codr\":\"4/6\"", 13);
+                    buff_index += 13;
+                    break;
+                case LR_FHSS_V1_CR_5_6:
+                    memcpy((void *)(buff_up + buff_index), (void *)",\"codr\":\"5/6\"", 13);
+                    buff_index += 13;
+                    break;                
+                default:
+                    MSG("ERROR: [up] lora packet with unknown coderate\n");
+                    memcpy((void *)(buff_up + buff_index), (void *)",\"codr\":\"?\"", 11);
+                    buff_index += 11;
+                    exit(EXIT_FAILURE);
+                }
+
+                /* Packet FHSS datarate */
+                switch (p->bandwidth)
+                {
+                case LR_FHSS_V1_BW_39063_HZ:
+                    memcpy((void *)(buff_up + buff_index), (void *)",\"datr\":\"M0CW39\"", 16);
+                    buff_index += 16;
+                    break;
+                case LR_FHSS_V1_BW_85938_HZ:
+                    memcpy((void *)(buff_up + buff_index), (void *)",\"datr\":\"M0CW86\"", 16);
+                    buff_index += 16;
+                    break;
+                case LR_FHSS_V1_BW_136719_HZ:
+                    memcpy((void *)(buff_up + buff_index), (void *)",\"datr\":\"M0CW137\"", 17);
+                    buff_index += 17;
+                    break;
+                case LR_FHSS_V1_BW_183594_HZ:
+                    memcpy((void *)(buff_up + buff_index), (void *)",\"datr\":\"M0CW184\"", 17);
+                    buff_index += 17;
+                    break;
+                case LR_FHSS_V1_BW_335938_HZ:
+                    memcpy((void *)(buff_up + buff_index), (void *)",\"datr\":\"M0CW336\"", 17);
+                    buff_index += 17;
+                    break;
+                case LR_FHSS_V1_BW_386719_HZ:
+                    memcpy((void *)(buff_up + buff_index), (void *)",\"datr\":\"M0CW387\"", 17);
+                    buff_index += 17;
+                    break;
+                case LR_FHSS_V1_BW_722656_HZ:
+                    memcpy((void *)(buff_up + buff_index), (void *)",\"datr\":\"M0CW723\"", 17);
+                    buff_index += 17;
+                    break;
+                case LR_FHSS_V1_BW_773438_HZ:
+                    memcpy((void *)(buff_up + buff_index), (void *)",\"datr\":\"M0CW773\"", 17);
+                    buff_index += 17;
+                    break;
+                case LR_FHSS_V1_BW_1523438_HZ:
+                    memcpy((void *)(buff_up + buff_index), (void *)",\"datr\":\"M0CW1523\"", 18);
+                    buff_index += 18;
+                    break;
+                case LR_FHSS_V1_BW_1574219_HZ:
+                    memcpy((void *)(buff_up + buff_index), (void *)",\"datr\":\"M0CW1574\"", 18);
+                    buff_index += 18;
+                    break;
+                default:
+                    MSG("ERROR: [up] FHSS packet with unknown bandwidth\n");
+                    memcpy((void *)(buff_up + buff_index), (void *)",\"datr\":\"M0CW?\"", 15);
+                    buff_index += 15;
+                    exit(EXIT_FAILURE);
+                }
+
+                /* LR-FHSS hopping grid number of steps  */
+                j = snprintf((char *)(buff_up + buff_index), TX_BUFF_SIZE - buff_index, ",\"hpw\":%d", p->labscim_grid_size);
+                if (j > 0)
+                {
+                    buff_index += j;
+                }
+                else
+                {
+                    MSG("ERROR: [up] snprintf failed line %u\n", (__LINE__ - 4));
+                    exit(EXIT_FAILURE);
+                }
+
+                /* Lora SNR, 11-13 useful chars */
+                j = snprintf((char *)(buff_up + buff_index), TX_BUFF_SIZE-buff_index, ",\"lsnr\":%.1f", NUM_MIN(p->snr,31.0));
+                if (j > 0) {
+                    buff_index += j;
+                } else {
+                    MSG("ERROR: [up] snprintf failed line %u\n", (__LINE__ - 4));
+                    exit(EXIT_FAILURE);
+                }
+            }
+            else {
                 MSG("ERROR: [up] received packet with unknown modulation\n");
                 exit(EXIT_FAILURE);
             }
