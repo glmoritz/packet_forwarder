@@ -274,16 +274,16 @@ static pthread_mutex_t gYieldMutex = PTHREAD_MUTEX_INITIALIZER; /* control acces
 
 uint64_t gDontYield = JIT_THREAD_MASK | UP_THREAD_MASK;
 
-uint8_t* gNodeName;
-uint8_t* gServerAddress;
+static uint8_t* gNodeName;
+static uint8_t* gServerAddress;
 
 char *global_cfg_path= "global_conf.json"; /* contain global (typ. network-wide) configuration */
 char *local_cfg_path = "local_conf.json"; /* contain node specific configuration, overwrite global parameters for parameters that are defined in both */
 char *debug_cfg_path = "debug_conf.json"; /* if present, all other configuration files are ignored */
 
 uint64_t gIsMaster;
-uint64_t gServerPort;
-uint64_t gBufferSize;
+static uint64_t gServerPort;
+static uint64_t gBufferSize;
 
 #define SERVER_PORT (9608)
 #define SERVER_ADDRESS "127.0.0.1"
