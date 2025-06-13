@@ -57,6 +57,7 @@ Maintainer: Michael Coracin
 #include "loragw_aux.h"
 #include "loragw_reg.h"
 
+#include "lr_fhss_v1_base_types.h"
 
 /* -------------------------------------------------------------------------- */
 /* --- PRIVATE MACROS ------------------------------------------------------- */
@@ -67,6 +68,8 @@ Maintainer: Michael Coracin
 
 /* -------------------------------------------------------------------------- */
 /* --- PRIVATE CONSTANTS ---------------------------------------------------- */
+
+#define NUM_MIN(a,b) (a>b)?b:a
 
 #ifndef VERSION_STRING
   #define VERSION_STRING "undefined"
@@ -159,7 +162,7 @@ static double xtal_correct = 1.0;
 /* GPS configuration and synchronization */
 static char gps_tty_path[64] = "\0"; /* path of the TTY port GPS is connected on */
 static int gps_tty_fd = -1; /* file descriptor of the GPS TTY port */
-static bool gps_enabled = false; /* is GPS enabled on that gateway ? */
+static bool gps_enabled = true; /* is GPS enabled on that gateway ? */
 
 /* GPS time reference */
 static pthread_mutex_t mx_timeref = PTHREAD_MUTEX_INITIALIZER; /* control access to GPS time reference */
@@ -271,16 +274,16 @@ static pthread_mutex_t gYieldMutex = PTHREAD_MUTEX_INITIALIZER; /* control acces
 
 uint64_t gDontYield = JIT_THREAD_MASK | UP_THREAD_MASK;
 
-uint8_t* gNodeName;
-uint8_t* gServerAddress;
+static uint8_t* gNodeName;
+static uint8_t* gServerAddress;
 
 char *global_cfg_path= "global_conf.json"; /* contain global (typ. network-wide) configuration */
 char *local_cfg_path = "local_conf.json"; /* contain node specific configuration, overwrite global parameters for parameters that are defined in both */
 char *debug_cfg_path = "debug_conf.json"; /* if present, all other configuration files are ignored */
 
 uint64_t gIsMaster;
-uint64_t gServerPort;
-uint64_t gBufferSize;
+static uint64_t gServerPort;
+static uint64_t gBufferSize;
 
 #define SERVER_PORT (9608)
 #define SERVER_ADDRESS "127.0.0.1"
@@ -1115,7 +1118,7 @@ int main(int argc, char const *argv[])
     struct coord_s cp_gps_coord = {0.0, 0.0, 0};
 
     /* SX1301 data variables */
-    uint32_t trig_tstamp;
+    uint64_t trig_tstamp;
 
     /* statistics variable */
     time_t t;
@@ -1186,37 +1189,44 @@ int main(int argc, char const *argv[])
     }
 
     /* Start GPS a.s.a.p., to allow it to lock */
-    if (gps_tty_path[0] != '\0') { /* do not try to open GPS device if no path set */
+    if (gps_tty_path[0] != '\0')
+    {                                                             /* do not try to open GPS device if no path set */
         i = lgw_gps_enable(gps_tty_path, "ubx7", 0, &gps_tty_fd); /* HAL only supports u-blox 7 for now */
-        if (i != LGW_GPS_SUCCESS) {
+        if (i != LGW_GPS_SUCCESS)
+        {
             printf("WARNING: [main] impossible to open %s for GPS sync (check permissions)\n", gps_tty_path);
             gps_enabled = false;
             gps_ref_valid = false;
-        } else {
+        }
+        else
+        {
             printf("INFO: [main] TTY port %s open for GPS synchronization\n", gps_tty_path);
             gps_enabled = true;
-            gps_ref_valid = false;
+            gps_ref_valid = true;
         }
     }
 
-    /* get timezone info */
-    tzset();
+    /*labscim fake gps*/
+      gps_enabled = true;
+      gps_ref_valid = true;
 
-    /* sanity check on configuration variables */
-    // TODO
+      /* get timezone info */
+      tzset();
 
-    
+      /* sanity check on configuration variables */
+      // TODO
 
-    /* prepare hints to open network sockets */
-    memset(&hints, 0, sizeof hints);
-    hints.ai_family = AF_INET; /* WA: Forcing IPv4 as AF_UNSPEC makes connection on localhost to fail */
-    hints.ai_socktype = SOCK_DGRAM;
+      /* prepare hints to open network sockets */
+      memset(&hints, 0, sizeof hints);
+      hints.ai_family = AF_INET; /* WA: Forcing IPv4 as AF_UNSPEC makes connection on localhost to fail */
+      hints.ai_socktype = SOCK_DGRAM;
 
-    /* look for server address w/ upstream port */
-    i = getaddrinfo(serv_addr, serv_port_up, &hints, &result);
-    if (i != 0) {
-        MSG("ERROR: [up] getaddrinfo on address %s (PORT %s) returned %s\n", serv_addr, serv_port_up, gai_strerror(i));
-        exit(EXIT_FAILURE);
+      /* look for server address w/ upstream port */
+      i = getaddrinfo(serv_addr, serv_port_up, &hints, &result);
+      if (i != 0)
+      {
+          MSG("ERROR: [up] getaddrinfo on address %s (PORT %s) returned %s\n", serv_addr, serv_port_up, gai_strerror(i));
+          exit(EXIT_FAILURE);
     }
 
     /* try to open socket for upstream traffic */
@@ -1313,18 +1323,18 @@ int main(int argc, char const *argv[])
     //}
 
     /* spawn thread to manage GPS */
-    // if (gps_enabled == true) {
-    //     i = pthread_create( &thrid_gps, NULL, (void * (*)(void *))thread_gps, NULL);
-    //     if (i != 0) {
-    //         MSG("ERROR: [main] impossible to create GPS thread\n");
-    //         exit(EXIT_FAILURE);
-    //     }
-    //     i = pthread_create( &thrid_valid, NULL, (void * (*)(void *))thread_valid, NULL);
+    //  if (gps_enabled == true) {
+    //      i = pthread_create( &thrid_gps, NULL, (void * (*)(void *))thread_gps, NULL);
+    //      if (i != 0) {
+    //          MSG("ERROR: [main] impossible to create GPS thread\n");
+    //          exit(EXIT_FAILURE);
+    //      }
+    // //     i = pthread_create( &thrid_valid, NULL, (void * (*)(void *))thread_valid, NULL);
     //     if (i != 0) {
     //         MSG("ERROR: [main] impossible to create validation thread\n");
     //        exit(EXIT_FAILURE);
     //     }
-    // }
+     //}
 
     /* configure signal handling */
     sigemptyset(&sigact.sa_mask);
@@ -1618,6 +1628,8 @@ void thread_up(void) {
                 pthread_mutex_unlock(&gYieldMutex);   
             }
             lgw_labscim_sleep(FETCH_SLEEP_MS,!gDontYield);
+            gps_process_sync();
+            gps_process_coords();
             continue;
         }
 #ifndef LABSCIM_REALTIME
@@ -1863,7 +1875,7 @@ void thread_up(void) {
                 }
 
                 /* Lora SNR, 11-13 useful chars */
-                j = snprintf((char *)(buff_up + buff_index), TX_BUFF_SIZE-buff_index, ",\"lsnr\":%.1f", p->snr);
+                j = snprintf((char *)(buff_up + buff_index), TX_BUFF_SIZE-buff_index, ",\"lsnr\":%.1f", NUM_MIN(p->snr,31.0));
                 if (j > 0) {
                     buff_index += j;
                 } else {
@@ -1882,7 +1894,109 @@ void thread_up(void) {
                     MSG("ERROR: [up] snprintf failed line %u\n", (__LINE__ - 4));
                     exit(EXIT_FAILURE);
                 }
-            } else {
+            } else if(p->modulation = MOD_LABSCIM_FHSS){ //I used the parameters found in chirpstack gateway bridge
+                //refer to https://github.com/brocaar/chirpstack-gateway-bridge/blob/12069641891ca6e90ab3c89aac899a33b47c6c49/internal/backend/semtechudp/packets/push_data.go
+                memcpy((void *)(buff_up + buff_index), (void *)",\"modu\":\"LR-FHSS\"", 17);
+                buff_index += 17;
+
+                /* FHSS Convolutional code rate */
+                switch (p->coderate)
+                {
+                case LR_FHSS_V1_CR_1_2:
+                    memcpy((void *)(buff_up + buff_index), (void *)",\"codr\":\"1/2\"", 13);
+                    buff_index += 13;
+                    break;
+                case LR_FHSS_V1_CR_1_3:
+                    memcpy((void *)(buff_up + buff_index), (void *)",\"codr\":\"1/3\"", 13);
+                    buff_index += 13;
+                    break;
+                case LR_FHSS_V1_CR_2_3:
+                    memcpy((void *)(buff_up + buff_index), (void *)",\"codr\":\"4/6\"", 13);
+                    buff_index += 13;
+                    break;
+                case LR_FHSS_V1_CR_5_6:
+                    memcpy((void *)(buff_up + buff_index), (void *)",\"codr\":\"5/6\"", 13);
+                    buff_index += 13;
+                    break;                
+                default:
+                    MSG("ERROR: [up] lora packet with unknown coderate\n");
+                    memcpy((void *)(buff_up + buff_index), (void *)",\"codr\":\"?\"", 11);
+                    buff_index += 11;
+                    exit(EXIT_FAILURE);
+                }
+
+                /* Packet FHSS datarate */
+                switch (p->bandwidth)
+                {
+                case LR_FHSS_V1_BW_39063_HZ:
+                    memcpy((void *)(buff_up + buff_index), (void *)",\"datr\":\"M0CW39\"", 16);
+                    buff_index += 16;
+                    break;
+                case LR_FHSS_V1_BW_85938_HZ:
+                    memcpy((void *)(buff_up + buff_index), (void *)",\"datr\":\"M0CW86\"", 16);
+                    buff_index += 16;
+                    break;
+                case LR_FHSS_V1_BW_136719_HZ:
+                    memcpy((void *)(buff_up + buff_index), (void *)",\"datr\":\"M0CW137\"", 17);
+                    buff_index += 17;
+                    break;
+                case LR_FHSS_V1_BW_183594_HZ:
+                    memcpy((void *)(buff_up + buff_index), (void *)",\"datr\":\"M0CW184\"", 17);
+                    buff_index += 17;
+                    break;
+                case LR_FHSS_V1_BW_335938_HZ:
+                    memcpy((void *)(buff_up + buff_index), (void *)",\"datr\":\"M0CW336\"", 17);
+                    buff_index += 17;
+                    break;
+                case LR_FHSS_V1_BW_386719_HZ:
+                    memcpy((void *)(buff_up + buff_index), (void *)",\"datr\":\"M0CW387\"", 17);
+                    buff_index += 17;
+                    break;
+                case LR_FHSS_V1_BW_722656_HZ:
+                    memcpy((void *)(buff_up + buff_index), (void *)",\"datr\":\"M0CW723\"", 17);
+                    buff_index += 17;
+                    break;
+                case LR_FHSS_V1_BW_773438_HZ:
+                    memcpy((void *)(buff_up + buff_index), (void *)",\"datr\":\"M0CW773\"", 17);
+                    buff_index += 17;
+                    break;
+                case LR_FHSS_V1_BW_1523438_HZ:
+                    memcpy((void *)(buff_up + buff_index), (void *)",\"datr\":\"M0CW1523\"", 18);
+                    buff_index += 18;
+                    break;
+                case LR_FHSS_V1_BW_1574219_HZ:
+                    memcpy((void *)(buff_up + buff_index), (void *)",\"datr\":\"M0CW1574\"", 18);
+                    buff_index += 18;
+                    break;
+                default:
+                    MSG("ERROR: [up] FHSS packet with unknown bandwidth\n");
+                    memcpy((void *)(buff_up + buff_index), (void *)",\"datr\":\"M0CW?\"", 15);
+                    buff_index += 15;
+                    exit(EXIT_FAILURE);
+                }
+
+                /* LR-FHSS hopping grid number of steps  */
+                j = snprintf((char *)(buff_up + buff_index), TX_BUFF_SIZE - buff_index, ",\"hpw\":%d", p->labscim_grid_size);
+                if (j > 0)
+                {
+                    buff_index += j;
+                }
+                else
+                {
+                    MSG("ERROR: [up] snprintf failed line %u\n", (__LINE__ - 4));
+                    exit(EXIT_FAILURE);
+                }
+
+                /* Lora SNR, 11-13 useful chars */
+                j = snprintf((char *)(buff_up + buff_index), TX_BUFF_SIZE-buff_index, ",\"lsnr\":%.1f", NUM_MIN(p->snr,31.0));
+                if (j > 0) {
+                    buff_index += j;
+                } else {
+                    MSG("ERROR: [up] snprintf failed line %u\n", (__LINE__ - 4));
+                    exit(EXIT_FAILURE);
+                }
+            }
+            else {
                 MSG("ERROR: [up] received packet with unknown modulation\n");
                 exit(EXIT_FAILURE);
             }
@@ -2088,6 +2202,9 @@ void thread_down(void) {
     last_beacon_gps_time.tv_sec = 0;
     last_beacon_gps_time.tv_nsec = 0;
 
+    gps_process_sync();
+    gps_process_coords();
+
     /* beacon packet parameters */
     beacon_pkt.tx_mode = ON_GPS; /* send on PPS pulse */
     beacon_pkt.rf_chain = 0; /* antenna A */
@@ -2237,14 +2354,14 @@ void thread_down(void) {
                         /* if no beacon has been queued, get next slot from current GPS time */
                         diff_beacon_time = time_reference_gps.gps.tv_sec % ((time_t)beacon_period);
                         next_beacon_gps_time.tv_sec = time_reference_gps.gps.tv_sec +
-                                                        ((time_t)beacon_period - diff_beacon_time);
+                                                        ((time_t)beacon_period - diff_beacon_time);                        
                     } else {
                         /* if there is already a beacon, take it as reference */
                         next_beacon_gps_time.tv_sec = last_beacon_gps_time.tv_sec + beacon_period;
                     }
                     /* now we can add a beacon_period to the reference to get next beacon GPS time */
                     next_beacon_gps_time.tv_sec += (retry * beacon_period);
-                    next_beacon_gps_time.tv_nsec = 0;
+                    next_beacon_gps_time.tv_nsec = 0;                    
 
 #if DEBUG_BEACON
                     {
@@ -2769,6 +2886,8 @@ void thread_jit(void) {
             pthread_mutex_unlock(&gYieldMutex);
         }
         lgw_labscim_sleep(10, !gDontYield);
+        gps_process_sync();
+        gps_process_coords();
 
         /* transfer data and metadata to the concentrator, and schedule TX */
         gettimeofday(&current_unix_time, NULL);
@@ -2846,7 +2965,7 @@ void thread_jit(void) {
 static void gps_process_sync(void) {
     struct timespec gps_time;
     struct timespec utc;
-    uint32_t trig_tstamp; /* concentrator timestamp associated with PPM pulse */
+    uint64_t trig_tstamp; /* concentrator timestamp associated with PPM pulse */
     int i = lgw_gps_get(&utc, &gps_time, NULL, NULL);
 
     /* get GPS time for synchronization */
@@ -2892,98 +3011,14 @@ static void gps_process_coords(void) {
     pthread_mutex_unlock(&mx_meas_gps);
 }
 
-void thread_gps(void) {
-    /* serial variables */
-    char serial_buff[128]; /* buffer to receive GPS data */
-    size_t wr_idx = 0;     /* pointer to end of chars in buffer */
+void thread_gps(void)
+{
 
-    /* variables for PPM pulse GPS synchronization */
-    enum gps_msg latest_msg; /* keep track of latest NMEA message parsed */
-
-    /* initialize some variables before loop */
-    memset(serial_buff, 0, sizeof serial_buff);
-
-    while (!exit_sig && !quit_sig) {
-        size_t rd_idx = 0;
-        size_t frame_end_idx = 0;
-
-        /* blocking non-canonical read on serial port */
-        ssize_t nb_char = read(gps_tty_fd, serial_buff + wr_idx, LGW_GPS_MIN_MSG_SIZE);
-        if (nb_char <= 0) {
-            MSG("WARNING: [gps] read() returned value %d\n", nb_char);
-            continue;
-        }
-        wr_idx += (size_t)nb_char;
-
-        /*******************************************
-         * Scan buffer for UBX/NMEA sync chars and *
-         * attempt to decode frame if one is found *
-         *******************************************/
-        while(rd_idx < wr_idx) {
-            size_t frame_size = 0;
-
-            /* Scan buffer for UBX sync char */
-            if(serial_buff[rd_idx] == (char)LGW_GPS_UBX_SYNC_CHAR) {
-
-                /***********************
-                 * Found UBX sync char *
-                 ***********************/
-                latest_msg = lgw_parse_ubx(&serial_buff[rd_idx], (wr_idx - rd_idx), &frame_size);
-
-                if (frame_size > 0) {
-                    if (latest_msg == INCOMPLETE) {
-                        /* UBX header found but frame appears to be missing bytes */
-                        frame_size = 0;
-                    } else if (latest_msg == INVALID) {
-                        /* message header received but message appears to be corrupted */
-                        MSG("WARNING: [gps] could not get a valid message from GPS (no time)\n");
-                        frame_size = 0;
-                    } else if (latest_msg == UBX_NAV_TIMEGPS) {
-                        gps_process_sync();
-                    }
-                }
-            } else if(serial_buff[rd_idx] == LGW_GPS_NMEA_SYNC_CHAR) {
-                /************************
-                 * Found NMEA sync char *
-                 ************************/
-                /* scan for NMEA end marker (LF = 0x0a) */
-                char* nmea_end_ptr = memchr(&serial_buff[rd_idx],(int)0x0a, (wr_idx - rd_idx));
-
-                if(nmea_end_ptr) {
-                    /* found end marker */
-                    frame_size = nmea_end_ptr - &serial_buff[rd_idx] + 1;
-                    latest_msg = lgw_parse_nmea(&serial_buff[rd_idx], frame_size);
-
-                    if(latest_msg == INVALID || latest_msg == UNKNOWN) {
-                        /* checksum failed */
-                        frame_size = 0;
-                    } else if (latest_msg == NMEA_RMC) { /* Get location from RMC frames */
-                        gps_process_coords();
-                    }
-                }
-            }
-
-            if(frame_size > 0) {
-                /* At this point message is a checksum verified frame
-                   we're processed or ignored. Remove frame from buffer */
-                rd_idx += frame_size;
-                frame_end_idx = rd_idx;
-            } else {
-                rd_idx++;
-            }
-        } /* ...for(rd_idx = 0... */
-
-        if(frame_end_idx) {
-          /* Frames have been processed. Remove bytes to end of last processed frame */
-          memcpy(serial_buff, &serial_buff[frame_end_idx], wr_idx - frame_end_idx);
-          wr_idx -= frame_end_idx;
-        } /* ...for(rd_idx = 0... */
-
-        /* Prevent buffer overflow */
-        if((sizeof(serial_buff) - wr_idx) < LGW_GPS_MIN_MSG_SIZE) {
-            memcpy(serial_buff, &serial_buff[LGW_GPS_MIN_MSG_SIZE], wr_idx - LGW_GPS_MIN_MSG_SIZE);
-            wr_idx -= LGW_GPS_MIN_MSG_SIZE;
-        }
+    while (!exit_sig && !quit_sig)
+    {
+        gps_process_sync();
+        gps_process_coords();
+        wait_ms(500);
     }
     MSG("\nINFO: End of GPS thread\n");
 }
