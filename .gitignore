@@ -1,3 +1,12 @@
 *.o
 *.swp
 *.bak
+
+# Build products. These four were committed in the first LabSCim import and carried ever
+# since, so every rebuild showed up as a diff of an ELF nobody can read or review, and a
+# clone brought someone else's binary that would run in preference to the sources next to
+# it. Build them with make; the top-level Makefile drives all four.
+/lora_pkt_fwd/lora_pkt_fwd
+/util_ack/util_ack
+/util_sink/util_sink
+/util_tx_test/util_tx_test
